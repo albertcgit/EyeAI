@@ -251,16 +251,28 @@ def plot_comparison(metrics_list: list[dict], cnn_report_path: Path | None,
     rows = []
 
     if cnn_report_path and cnn_report_path.exists():
-        cnn_df = pd.read_csv(cnn_report_path, index_col=0)
-        if "f1-score" in cnn_df.columns:
-            kappa_val = float(cnn_df.loc["normal", "kappa"]) \
-                if "kappa" in cnn_df.columns else 0.0
+        summary_path = cnn_report_path.parent / "evaluation_summary.json"
+        if summary_path.exists():
+            import json
+            with open(summary_path) as f:
+                summary = json.load(f)
             rows.append({
                 "model":    "EfficientNet-B3\n(fine-tuned)",
-                "accuracy": round(float(cnn_df.loc["weighted avg", "f1-score"]), 4),
-                "macro_f1": round(float(cnn_df.loc["macro avg",    "f1-score"]), 4),
-                "kappa":    kappa_val,
+                "accuracy": round(float(summary.get("weighted_f1", 0.0)), 4),
+                "macro_f1": round(float(summary.get("macro_f1", 0.0)), 4),
+                "kappa":    round(float(summary.get("kappa", 0.0)), 4),
             })
+        elif cnn_report_path.exists():
+            cnn_df = pd.read_csv(cnn_report_path, index_col=0)
+            if "f1-score" in cnn_df.columns:
+                acc_row = "accuracy" if "accuracy" in cnn_df.index else "weighted avg"
+                rows.append({
+                    "model":    "EfficientNet-B3\n(fine-tuned)",
+                    "accuracy": round(float(cnn_df.loc[acc_row, "f1-score"]) if acc_row != "accuracy"
+                                      else float(cnn_df.loc["accuracy"].iloc[0]), 4),
+                    "macro_f1": round(float(cnn_df.loc["macro avg", "f1-score"]), 4),
+                    "kappa":    0.0,
+                })
 
     for m in metrics_list:
         if not m:
@@ -314,11 +326,23 @@ def plot_per_class_comparison(metrics_list: list[dict],
     rows = []
 
     if cnn_report_path and cnn_report_path.exists():
-        cnn_df = pd.read_csv(cnn_report_path, index_col=0)
-        for cls in CLASS_NAMES:
-            if cls in cnn_df.index:
-                rows.append({"mode": "EfficientNet-B3", "class": cls,
-                              "f1": round(float(cnn_df.loc[cls, "f1-score"]), 4)})
+        summary_path = cnn_report_path.parent / "evaluation_summary.json"
+        if summary_path.exists():
+            import json
+            with open(summary_path) as f:
+                summary = json.load(f)
+            per_class = summary.get("per_class", {})
+            for cls in CLASS_NAMES:
+                if cls in per_class:
+                    f1 = per_class[cls].get("f1-score", 0.0)
+                    rows.append({"mode": "EfficientNet-B3", "class": cls,
+                                 "f1": round(float(f1), 4)})
+        else:
+            cnn_df = pd.read_csv(cnn_report_path, index_col=0)
+            for cls in CLASS_NAMES:
+                if cls in cnn_df.index:
+                    rows.append({"mode": "EfficientNet-B3", "class": cls,
+                                 "f1": round(float(cnn_df.loc[cls, "f1-score"]), 4)})
 
     for m in metrics_list:
         if not m or not m.get("per_class"):
@@ -487,11 +511,19 @@ def main(data_dir, cnn_report, out_dir, mode, max_images, model_name, sleep_sec)
     cnn_path_obj = Path(cnn_report) if cnn_report else None
     if cnn_path_obj and cnn_path_obj.exists():
         try:
-            cnn_df  = pd.read_csv(cnn_path_obj, index_col=0)
-            cnn_acc = float(cnn_df.loc["weighted avg", "f1-score"])
-            cnn_f1  = float(cnn_df.loc["macro avg",   "f1-score"])
-            cnn_k   = float(cnn_df.loc["normal", "kappa"]) \
-                      if "kappa" in cnn_df.columns else 0.0
+            import json
+            summary_path = cnn_path_obj.parent / "evaluation_summary.json"
+            if summary_path.exists():
+                with open(summary_path) as f:
+                    summary = json.load(f)
+                cnn_acc = float(summary.get("weighted_f1", 0.0))
+                cnn_f1  = float(summary.get("macro_f1", 0.0))
+                cnn_k   = float(summary.get("kappa", 0.0))
+            else:
+                cnn_df  = pd.read_csv(cnn_path_obj, index_col=0)
+                cnn_acc = float(cnn_df.loc["weighted avg", "f1-score"])
+                cnn_f1  = float(cnn_df.loc["macro avg",   "f1-score"])
+                cnn_k   = 0.0
             print(f"  {'EfficientNet-B3 (fine-tuned)':<35} {cnn_acc:>9.4f} "
                   f"{cnn_f1:>9.4f} {cnn_k:>8.4f}")
         except Exception:
