@@ -262,6 +262,14 @@ def main():
 
     if uploaded is None:
         st.info("Upload a fundus image above to begin screening.")
+        # Added authors here even if nothing is uploaded so it stays at the bottom
+        st.markdown("---")
+        st.markdown(
+            "<p style='text-align:center; color:#777;'>"
+            "Developed by <b>Albert Levinson Canonza</b> & <b>Earl Tavera</b> | 2026"
+            "</p>",
+            unsafe_allow_html=True
+        )
         return
 
     # Load and preprocess
@@ -402,6 +410,14 @@ def main():
         "be used for clinical diagnosis. Always consult a qualified ophthalmologist."
         "</p>",
         unsafe_allow_html=True,
+    )
+
+    # ── Author Attribution ───────────────────────────────────────
+    st.markdown(
+        "<p style='text-align:center; color:#777; margin-top:30px;'>"
+        "Developed by <b>Albert Levinson Canonza</b> & <b>Earl Tavera</b> | 2026"
+        "</p>",
+        unsafe_allow_html=True
     )
 
 
