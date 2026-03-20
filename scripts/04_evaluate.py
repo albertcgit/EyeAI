@@ -22,11 +22,11 @@ from tqdm import tqdm
 # Reuse dataset class from 03_classify
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from classify_03 import RetinalDataset   # fallback import alias
+# from classify_03 import RetinalDataset   # fallback import alias
 
 # If standalone, redefine minimal dataset
 try:
-    from classify_03 import RetinalDataset
+    pass  # import removed — using SimpleDataset defined in main()
 except ImportError:
     import albumentations as A
     from albumentations.pytorch import ToTensorV2
