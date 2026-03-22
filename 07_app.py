@@ -20,27 +20,27 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 CLASS_COLORS = {
-    "normal":          "#5BAD6F",
-    "cataract":        "#E05A4E",
-    "glaucoma":        "#F4A642",
-    "retinal_disease": "#9B59B6",
+    "Normal":          "#5BAD6F",
+    "Cataract":        "#E05A4E",
+    "Glaucoma":        "#F4A642",
+    "Retinal_disease": "#9B59B6",
 }
 RISK_ICONS = {
-    "normal":          "✅",
-    "cataract":        "⚠️",
-    "glaucoma":        "🔶",
-    "retinal_disease": "🔴",
+    "Normal":          "✅",
+    "Cataract":        "⚠️",
+    "Glaucoma":        "🔶",
+    "Retinal_disease": "🔴",
 }
 CLINICAL_NOTES = {
-    "normal":
+    "Normal":
         "No significant pathology detected. Routine follow-up recommended.",
-    "cataract":
+    "Cataract":
         "Lens opacity indicators present. Consider referral for slit-lamp examination "
         "and surgical consultation if vision is impaired.",
-    "glaucoma":
+    "Glaucoma":
         "Optic disc changes consistent with glaucoma risk. "
         "Recommend IOP measurement, visual field test, and specialist referral.",
-    "retinal_disease":
+    "Retinal_disease":
         "Retinal pathology detected. Urgent referral to ophthalmologist recommended "
         "for detailed fundus examination and OCT imaging.",
 }
@@ -220,7 +220,7 @@ def main():
     st.sidebar.header("⚙️ Settings")
     model_name = st.sidebar.selectbox(
         "Classifier Model",
-        ["efficientnet_b3", "resnet50", "vit_base_patch16_224"],
+        ["Efficientnet_b3", "Resnet50", "Vit_base_patch16_224"],
     )
     ckpt_dir   = st.sidebar.text_input("Classifier checkpoint dir", "outputs/classifier")
     seg_dir    = st.sidebar.text_input("Segmentation model dir",    "outputs/segmentation")
@@ -406,7 +406,7 @@ def main():
     st.markdown("---")
     st.markdown(
         "<p style='color:#999; font-size:0.85em; text-align:center;'>"
-        "⚠️ <b>Research Prototype.</b> This tool is not a certified medical device and must not "
+        "⚠️ ⚠️ <b>Research Prototype.</b> This tool is not a certified medical device and must not ⚠️ ⚠️  "
         "be used for clinical diagnosis. Always consult a qualified ophthalmologist."
         "</p>",
         unsafe_allow_html=True,
