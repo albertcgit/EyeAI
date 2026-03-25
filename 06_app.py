@@ -67,51 +67,6 @@ def load_classifier(ckpt_dir: str = "outputs/classifier",
     return model, idx_to_class, model_name
 
 
-@st.cache_resource
-def load_unet(seg_dir: str, target: str):
-    ckpt_path = Path(seg_dir) / target / "unet_best.pth"
-    if not ckpt_path.exists():
-        return None
-
-    class DoubleConv(nn.Module):
-        def __init__(self, in_ch, out_ch):
-            super().__init__()
-            self.net = nn.Sequential(
-                nn.Conv2d(in_ch, out_ch, 3, padding=1, bias=False),
-                nn.BatchNorm2d(out_ch), nn.ReLU(inplace=True),
-                nn.Conv2d(out_ch, out_ch, 3, padding=1, bias=False),
-                nn.BatchNorm2d(out_ch), nn.ReLU(inplace=True),
-            )
-        def forward(self, x): return self.net(x)
-
-    class UNet(nn.Module):
-        def __init__(self, base_ch=32):
-            super().__init__()
-            self.enc1 = DoubleConv(3, base_ch); self.enc2 = DoubleConv(base_ch, base_ch*2)
-            self.enc3 = DoubleConv(base_ch*2, base_ch*4); self.enc4 = DoubleConv(base_ch*4, base_ch*8)
-            self.bottleneck = DoubleConv(base_ch*8, base_ch*16)
-            self.up4 = nn.ConvTranspose2d(base_ch*16, base_ch*8, 2, stride=2)
-            self.dec4 = DoubleConv(base_ch*16, base_ch*8)
-            self.up3 = nn.ConvTranspose2d(base_ch*8, base_ch*4, 2, stride=2)
-            self.dec3 = DoubleConv(base_ch*8, base_ch*4)
-            self.up2 = nn.ConvTranspose2d(base_ch*4, base_ch*2, 2, stride=2)
-            self.dec2 = DoubleConv(base_ch*4, base_ch*2)
-            self.up1 = nn.ConvTranspose2d(base_ch*2, base_ch, 2, stride=2)
-            self.dec1 = DoubleConv(base_ch*2, base_ch)
-            self.head = nn.Conv2d(base_ch, 1, 1); self.pool = nn.MaxPool2d(2)
-        def forward(self, x):
-            e1=self.enc1(x); e2=self.enc2(self.pool(e1)); e3=self.enc3(self.pool(e2))
-            e4=self.enc4(self.pool(e3)); b=self.bottleneck(self.pool(e4))
-            d4=self.dec4(torch.cat([self.up4(b),e4],1)); d3=self.dec3(torch.cat([self.up3(d4),e3],1))
-            d2=self.dec2(torch.cat([self.up2(d3),e2],1)); d1=self.dec1(torch.cat([self.up1(d2),e1],1))
-            return torch.sigmoid(self.head(d1))
-
-    unet = UNet(base_ch=32)
-    unet.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
-    unet.eval()
-    return unet
-
-
 # ── Inference Helpers ─────────────────────────────────────────────────────────
 def preprocess_for_inference(img_rgb: np.ndarray) -> torch.Tensor:
     tf = A.Compose([
@@ -174,30 +129,6 @@ def overlay_heatmap(img_rgb: np.ndarray, cam: np.ndarray, alpha: float = 0.45) -
     return (img_rgb * (1 - alpha) + heatmap * alpha).clip(0, 255).astype(np.uint8)
 
 
-def run_segmentation(unet, img_rgb: np.ndarray) -> np.ndarray:
-    tf    = A.Compose([A.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]), ToTensorV2()])
-    t     = tf(image=img_rgb)["image"].unsqueeze(0)
-    with torch.no_grad():
-        mask = unet(t)[0, 0].numpy()
-    return mask
-
-
-def compute_cdr(mask: np.ndarray) -> float:
-    disc_bin = (mask > 0.5).astype(np.uint8) * 255
-    contours, _ = cv2.findContours(disc_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours: return 0.0
-    _, _, _, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
-    return round(float(h * 0.45 / (h + 1e-8)), 3)
-
-
-def mask_overlay(img_rgb: np.ndarray, mask: np.ndarray,
-                 color: tuple = (0, 200, 100)) -> np.ndarray:
-    overlay = img_rgb.copy()
-    m = (mask > 0.5)
-    overlay[m] = (overlay[m] * 0.5 + np.array(color) * 0.5).clip(0, 255)
-    return overlay.astype(np.uint8)
-
-
 # ── Streamlit App ─────────────────────────────────────────────────────────────
 def main():
     st.set_page_config(
@@ -220,11 +151,10 @@ def main():
     st.sidebar.header("⚙️ Settings")
     model_name = st.sidebar.selectbox(
         "Classifier Model",
-        ["Efficientnet_b3", "Resnet50", "Vit_base_patch16_224"],
+        ["efficientnet_b3", "resnet50", "vit_base_patch16_224"],
     )
-    ckpt_dir   = st.sidebar.text_input("Classifier checkpoint dir", "outputs/classifier")
-    seg_dir    = st.sidebar.text_input("Segmentation model dir",    "outputs/segmentation")
-    show_clahe = st.sidebar.checkbox("Show CLAHE-enhanced image",   value=True)
+    ckpt_dir       = st.sidebar.text_input("Classifier checkpoint dir", "outputs/classifier")
+    show_clahe     = st.sidebar.checkbox("Show CLAHE-enhanced image", value=True)
     conf_threshold = st.sidebar.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.05)
 
     st.sidebar.markdown("---")
@@ -234,16 +164,13 @@ def main():
         "2. Preprocessing: `02_preprocess.py`\n"
         "3. Classifier: `03_classify.py`\n"
         "4. Evaluation: `04_evaluate.py`\n"
-        "5. Segmentation: `05_segment.py`\n"
-        "6. GAN augment: `06_augment.py`\n"
-        "7. This app: `07_app.py`"
+        "5. LLM Benchmark: `05_llm_classify_gemini.py`\n"
+        "6. This app: `07_app.py`"
     )
 
     # Load models
     with st.spinner("Loading models..."):
         classifier, idx_to_class, loaded_model_name = load_classifier(ckpt_dir, model_name)
-        disc_unet = load_unet(seg_dir, "disc")
-        lens_unet = load_unet(seg_dir, "lens")
 
     if classifier is None:
         st.warning(
@@ -262,7 +189,6 @@ def main():
 
     if uploaded is None:
         st.info("Upload a fundus image above to begin screening.")
-        # Added authors here even if nothing is uploaded so it stays at the bottom
         st.markdown("---")
         st.markdown(
             "<p style='text-align:center; color:#777;'>"
@@ -299,12 +225,6 @@ def main():
         has_cam = True
     except Exception as e:
         has_cam = False
-
-    # ── Segmentation & Biomarkers ────────────────────────────────
-    disc_mask = run_segmentation(disc_unet, img_rgb) if disc_unet else None
-    lens_mask = run_segmentation(lens_unet, img_rgb) if lens_unet else None
-    cdr       = compute_cdr(disc_mask) if disc_mask is not None else None
-    opacity   = float(lens_mask.mean()) if lens_mask is not None else None
 
     # ── Layout ──────────────────────────────────────────────────
     st.markdown("---")
@@ -345,62 +265,15 @@ def main():
 
     # ── Image columns ────────────────────────────────────────────
     st.markdown("---")
-    n_cols = sum([True, has_cam,
-                  disc_mask is not None, lens_mask is not None])
-    cols = st.columns(n_cols)
-    col_idx = 0
+    cols = st.columns(2 if has_cam else 1)
 
-    with cols[col_idx]:
+    with cols[0]:
         label = "CLAHE Enhanced" if show_clahe else "Input Image"
         st.image(img_rgb, caption=label, use_container_width=True)
-    col_idx += 1
 
     if has_cam:
-        with cols[col_idx]:
+        with cols[1]:
             st.image(cam_img, caption="Grad-CAM Attention", use_container_width=True)
-        col_idx += 1
-
-    if disc_mask is not None:
-        disc_viz = mask_overlay(img_rgb, disc_mask, color=(0, 200, 100))
-        with cols[col_idx]:
-            st.image(disc_viz, caption="Optic Disc Segmentation", use_container_width=True)
-        col_idx += 1
-
-    if lens_mask is not None:
-        lens_viz = mask_overlay(img_rgb, lens_mask, color=(200, 100, 0))
-        with cols[col_idx]:
-            st.image(lens_viz, caption="Lens Segmentation", use_container_width=True)
-
-    # ── Biomarkers ───────────────────────────────────────────────
-    if cdr is not None or opacity is not None:
-        st.markdown("---")
-        st.subheader("🔬 Extracted Biomarkers")
-        bm_cols = st.columns(2)
-
-        if cdr is not None:
-            glaucoma_risk = "High" if cdr > 0.6 else ("Moderate" if cdr > 0.4 else "Low")
-            risk_color    = {"High": "#E05A4E", "Moderate": "#F4A642", "Low": "#5BAD6F"}[glaucoma_risk]
-            with bm_cols[0]:
-                st.metric("Cup-to-Disc Ratio (CDR)", f"{cdr:.3f}")
-                st.markdown(
-                    f"Glaucoma risk: "
-                    f"<span style='color:{risk_color}; font-weight:bold;'>{glaucoma_risk}</span>"
-                    f" (CDR > 0.6 = high risk)",
-                    unsafe_allow_html=True
-                )
-
-        if opacity is not None:
-            opacity_pct  = opacity * 100
-            cataract_sev = ("Severe" if opacity > 0.4 else
-                            "Moderate" if opacity > 0.2 else "Mild")
-            sev_color = {"Severe": "#E05A4E", "Moderate": "#F4A642", "Mild": "#5BAD6F"}[cataract_sev]
-            with bm_cols[1]:
-                st.metric("Lens Opacity Area", f"{opacity_pct:.1f}%")
-                st.markdown(
-                    f"Cataract severity: "
-                    f"<span style='color:{sev_color}; font-weight:bold;'>{cataract_sev}</span>",
-                    unsafe_allow_html=True
-                )
 
     # ── Disclaimer ───────────────────────────────────────────────
     st.markdown("---")

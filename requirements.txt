@@ -11,6 +11,4 @@ Pillow==10.2.0
 tqdm==4.66.2
 albumentations==1.4.3
 streamlit==1.32.0
-grad-cam==1.4.8
-scipy==1.12.0
 google-genai>=0.7.0
