@@ -273,14 +273,66 @@ def main():
         )
         return
 
-    # Load and preprocess
-    file_bytes = np.frombuffer(uploaded.read(), np.uint8)
-    img_bgr    = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    img_bgr    = apply_clahe(img_bgr)
-    img_rgb    = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    img_rgb    = cv2.resize(img_rgb, (224, 224))
+    # ── Raw image (before processing) ──────────────────────────
+    file_bytes  = np.frombuffer(uploaded.read(), np.uint8)
+    img_bgr_raw = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    img_rgb_raw = cv2.cvtColor(img_bgr_raw, cv2.COLOR_BGR2RGB)
+    img_rgb_raw = cv2.resize(img_rgb_raw, (224, 224))
 
-    # ── Classification ──────────────────────────────────────────
+    # ── CLAHE enhanced ──────────────────────────────────────────
+    img_bgr_clahe = apply_clahe(img_bgr_raw.copy())
+    img_rgb_clahe = cv2.cvtColor(img_bgr_clahe, cv2.COLOR_BGR2RGB)
+    img_rgb_clahe = cv2.resize(img_rgb_clahe, (224, 224))
+
+    # Use CLAHE image for inference
+    img_rgb = img_rgb_clahe
+
+    # ─────────────────────────────────────────────────────────────
+    # STEP 1 — CLAHE Preprocessing
+    # ─────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🔬 Step 1 — CLAHE Preprocessing")
+    st.caption(
+        "Contrast Limited Adaptive Histogram Equalisation (CLAHE) enhances local contrast "
+        "tile-by-tile on the L channel of the LAB colour space — revealing vessel and disc "
+        "detail that would otherwise be lost in flat or overexposed images."
+    )
+    col_raw, col_clahe = st.columns(2)
+    with col_raw:
+        st.image(img_rgb_raw,   caption="Original — raw upload", use_container_width=True)
+    with col_clahe:
+        st.image(img_rgb_clahe, caption="After CLAHE — enhanced local contrast", use_container_width=True)
+
+    # ─────────────────────────────────────────────────────────────
+    # STEP 2 — Albumentations Augmentation
+    # ─────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🔀 Step 2 — Albumentations Augmentation")
+    st.caption(
+        "During training, each image was randomly transformed to artificially grow the dataset "
+        "and reduce overfitting. These augmentations are applied at training time only — "
+        "the model never sees the same image twice in exactly the same form."
+    )
+
+    aug_transforms = [
+        ("Original",          A.NoOp()),
+        ("Horizontal flip",   A.HorizontalFlip(p=1.0)),
+        ("Rotation 15°",      A.Rotate(limit=(15, 15), p=1.0)),
+        ("Colour jitter",     A.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1, p=1.0)),
+        ("Gaussian noise",    A.GaussNoise(var_limit=(20, 60), p=1.0)),
+        ("CoarseDropout",     A.CoarseDropout(max_holes=8, max_height=16, max_width=16, p=1.0)),
+    ]
+
+    aug_cols = st.columns(3)
+    for idx, (label, transform) in enumerate(aug_transforms):
+        aug = A.Compose([transform])
+        aug_img = aug(image=img_rgb_clahe)["image"]
+        with aug_cols[idx % 3]:
+            st.image(aug_img, caption=label, use_container_width=True)
+
+    # ─────────────────────────────────────────────────────────────
+    # Classification + Grad-CAM
+    # ─────────────────────────────────────────────────────────────
     img_tensor = preprocess_for_inference(img_rgb)
     with torch.no_grad():
         logits = classifier(img_tensor)
@@ -292,20 +344,21 @@ def main():
     icon       = RISK_ICONS.get(pred_class, "🔬")
     color      = CLASS_COLORS.get(pred_class, "#888")
 
-    # ── Grad-CAM ────────────────────────────────────────────────
     try:
         cam     = run_gradcam(classifier, img_tensor.requires_grad_(True),
                               pred_idx, loaded_model_name)
         cam_img = overlay_heatmap(img_rgb, cam)
         has_cam = True
-    except Exception as e:
+    except Exception:
         has_cam = False
 
-    # ── Layout ──────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────
+    # STEP 3 — Prediction + Grad-CAM
+    # ─────────────────────────────────────────────────────────────
     st.markdown("---")
+    st.markdown("### 🧠 Step 3 — AI Prediction + Grad-CAM Explainability")
     st.subheader(f"{icon} Diagnosis: **{pred_class.replace('_', ' ').title()}**")
 
-    # Confidence bar
     col_pred, col_note = st.columns([1, 2])
     with col_pred:
         st.markdown(f"""
@@ -316,14 +369,11 @@ def main():
               </span>
             </div>
         """, unsafe_allow_html=True)
-
         if pred_conf < conf_threshold:
             st.warning(f"Low confidence ({pred_conf:.1%}). Result may be unreliable.")
-
     with col_note:
         st.info(f"🩺 **Clinical note:** {CLINICAL_NOTES.get(pred_class, '')}")
 
-    # Probability breakdown
     st.markdown("**Probability breakdown:**")
     prob_cols = st.columns(len(idx_to_class))
     for i, (ci, cn) in enumerate(idx_to_class.items()):
@@ -338,17 +388,21 @@ def main():
                 unsafe_allow_html=True
             )
 
-    # ── Image columns ────────────────────────────────────────────
     st.markdown("---")
-    cols = st.columns(2 if has_cam else 1)
-
-    with cols[0]:
-        label = "CLAHE Enhanced" if show_clahe else "Input Image"
-        st.image(img_rgb, caption=label, use_container_width=True)
-
+    img_cols = st.columns(2 if has_cam else 1)
+    with img_cols[0]:
+        st.image(img_rgb, caption="CLAHE enhanced input", use_container_width=True)
     if has_cam:
-        with cols[1]:
-            st.image(cam_img, caption="Grad-CAM Attention", use_container_width=True)
+        with img_cols[1]:
+            st.image(cam_img,
+                     caption="Grad-CAM — highlighted region drove the prediction",
+                     use_container_width=True)
+        st.caption(
+            "🔴 Red/yellow regions = areas the model focused on most heavily. "
+            "🔵 Blue = low attention. "
+            "This confirms the model is looking at clinically relevant retinal features, "
+            "not background noise."
+        )
 
     # ── Disclaimer ───────────────────────────────────────────────
     st.markdown("---")
