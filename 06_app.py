@@ -1,5 +1,6 @@
 import json
 import sys
+import os
 from pathlib import Path
 from io import BytesIO
 
@@ -14,6 +15,7 @@ import matplotlib.patches as mpatches
 from PIL import Image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from huggingface_hub import hf_hub_download
 
 # Add parent to path for local imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -47,14 +49,28 @@ CLINICAL_NOTES = {
 
 
 # ── Model Loading ─────────────────────────────────────────────────────────────
+HF_REPO = "alcapps01/eyeai-models"
+
 @st.cache_resource
 def load_classifier(ckpt_dir: str = "outputs/classifier",
                     model_name: str = "efficientnet_b3"):
-    ckpt_path = Path(ckpt_dir) / f"{model_name}_best.pth"
-    class_map_path = Path(ckpt_dir) / "class_map.json"
-
-    if not ckpt_path.exists():
-        return None, None, None
+    try:
+        # Download from Hugging Face Hub (cached after first download)
+        ckpt_path = hf_hub_download(
+            repo_id=HF_REPO,
+            filename=f"{model_name}_best.pth",
+        )
+        class_map_path = hf_hub_download(
+            repo_id=HF_REPO,
+            filename="class_map.json",
+        )
+    except Exception as e:
+        # Fallback to local path
+        ckpt_path = Path(ckpt_dir) / f"{model_name}_best.pth"
+        class_map_path = Path(ckpt_dir) / "class_map.json"
+        if not Path(ckpt_path).exists():
+            st.warning(f"Could not load model from Hugging Face or local path: {e}")
+            return None, None, None
 
     with open(class_map_path) as f:
         idx_to_class = {int(k): v for k, v in json.load(f).items()}
@@ -142,7 +158,7 @@ def main():
         <h1 style='text-align:center; color:#1B3A6B;'>👁️ Cataract Screening AI</h1>
         <p style='text-align:center; color:#555; font-size:1.1em;'>
           Automated ocular disease detection from retinal fundus images<br>
-          <em>MSE800 Assessment 2 Project</em>
+          <em>Research prototype — not for clinical use</em>
         </p>
         <hr style='border:1px solid #E0E0E0; margin-bottom:24px;'>
     """, unsafe_allow_html=True)
@@ -153,7 +169,7 @@ def main():
         "Classifier Model",
         ["efficientnet_b3", "resnet50", "vit_base_patch16_224"],
     )
-    ckpt_dir       = st.sidebar.text_input("Classifier checkpoint dir", "outputs/classifier")
+    ckpt_dir       = "outputs/classifier"  # fallback only
     show_clahe     = st.sidebar.checkbox("Show CLAHE-enhanced image", value=True)
     conf_threshold = st.sidebar.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.05)
 
@@ -165,7 +181,7 @@ def main():
         "3. Classifier: `03_classify.py`\n"
         "4. Evaluation: `04_evaluate.py`\n"
         "5. LLM Benchmark: `05_llm_classify_gemini.py`\n"
-        "6. This app: `06_app.py`"
+        "6. This app: `07_app.py`"
     )
 
     # Load models
@@ -175,8 +191,8 @@ def main():
     if classifier is None:
         st.warning(
             "⚠️ No trained classifier found. "
-            f"Expected: `{ckpt_dir}/{model_name}_best.pth`\n\n"
-            "Run `python 03_classify.py` first, then relaunch this app."
+            f"Could not load model `{model_name}` from Hugging Face Hub.\n\n"
+            "Check that the model file exists at: https://huggingface.co/alcapps01/eyeai-models"
         )
         st.stop()
 
