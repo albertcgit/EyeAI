@@ -142,7 +142,7 @@ def main():
         <h1 style='text-align:center; color:#1B3A6B;'>👁️ Cataract Screening AI</h1>
         <p style='text-align:center; color:#555; font-size:1.1em;'>
           Automated ocular disease detection from retinal fundus images<br>
-          <em>Research prototype — not for clinical use</em>
+          <em>MSE800 Assessment 2 Project</em>
         </p>
         <hr style='border:1px solid #E0E0E0; margin-bottom:24px;'>
     """, unsafe_allow_html=True)
@@ -165,7 +165,7 @@ def main():
         "3. Classifier: `03_classify.py`\n"
         "4. Evaluation: `04_evaluate.py`\n"
         "5. LLM Benchmark: `05_llm_classify_gemini.py`\n"
-        "6. This app: `07_app.py`"
+        "6. This app: `06_app.py`"
     )
 
     # Load models
