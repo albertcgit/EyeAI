@@ -1,4 +1,4 @@
-# EyeAI
+# EyeAI — Deep Learning for Early Cataract Detection
 
 ## Pre-requisites
 
@@ -10,7 +10,7 @@
 
 ---
 
-## Executing with Google Colab
+## Execution
 
 > **Note:** Cell 1 and Cell 2 must be run directly in a Google Colab cell. They cannot be moved into a `.py` script as they rely on Colab-specific UI features (`drive.mount`, `files.upload`).
 
@@ -49,26 +49,24 @@ os.environ['GEMINI_API_KEY'] = userdata.get('GEMINI_API_KEY')
 
 ## Streamlit Deployment
 
-1. Download model files from Drive to your local machine:
-   - `outputs/classifier/efficientnet_b3_best.pth`
-   - `outputs/classifier/resnet50_best.pth`
-   - `outputs/classifier/vit_base_patch16_224_best.pth`
-   - `outputs/classifier/class_map.json`
+Model checkpoints and class map are hosted on Hugging Face Hub and downloaded automatically at startup — no manual file transfers needed.
 
-2. Push all files including model files to GitHub
+**Model repository:** https://huggingface.co/alcapps01/eyeai-models
+
+### Steps
+
+1. **No model download needed** — `06_app.py` fetches all `.pth` files and `class_map.json` from Hugging Face Hub automatically on first launch and caches them locally.
+
+2. **Push code to GitHub** (no model files required in the repo)
 
 ```
 EyeAI/
-├── 06_app.py                              ← Streamlit app (root — required by Streamlit Cloud)
-├── requirements.txt                       ← Dependencies (root — required by Streamlit Cloud)
-├── packages.txt                           ← System dependencies (libgl1, libglib2.0-dev)
+├── 06_app.py                          ← Streamlit app (root — required by Streamlit Cloud)
+├── requirements.txt                   ← Dependencies (root — required by Streamlit Cloud)
+├── packages.txt                       ← System dependencies (libgl1, libglib2.0-dev)
 ├── README.md
-├── outputs/
-│   └── classifier/
-│       ├── efficientnet_b3_best.pth       ← Required for app
-│       ├── resnet50_best.pth              ← Required for app
-│       ├── vit_base_patch16_224_best.pth  ← Required for app
-│       └── class_map.json                 ← Required for app
+├── .devcontainer/
+│   └── devcontainer.json              ← GitHub Codespaces config
 └── scripts/
     ├── 01_eda.py
     ├── 02_preprocess.py
@@ -79,7 +77,20 @@ EyeAI/
     └── run_pipeline.py
 ```
 
-3. Connect repo on [Streamlit Cloud](https://streamlit.io/cloud)
-4. Set Python version to **3.11** in Streamlit Cloud dashboard settings
-5. Set main file path to `06_app.py`
-6. Deploy
+3. **Connect repo on [Streamlit Cloud](https://streamlit.io/cloud)**
+4. **Set Python version to 3.11** in Streamlit Cloud dashboard settings
+5. **Set main file path** to `06_app.py`
+6. **Deploy** — on first boot the app downloads models from Hugging Face (~390MB), subsequent starts use the cache
+
+---
+
+## GitHub Codespaces
+
+This repo includes a `.devcontainer` configuration. Click **Code → Open with Codespaces** on GitHub to launch a fully configured browser-based development environment with the app running automatically.
+
+---
+
+## Repository Notes
+
+- Model `.pth` files and `class_map.json` are **not** stored in this repository — they are hosted at https://huggingface.co/alcapps01/eyeai-models
+- If you retrain models via `run_pipeline.py`, upload the new `.pth` files and `class_map.json` to the Hugging Face repo to update the deployment
