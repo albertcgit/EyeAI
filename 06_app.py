@@ -51,6 +51,48 @@ CLINICAL_NOTES = {
 # ── Model Loading ─────────────────────────────────────────────────────────────
 HF_REPO = "alcapps01/eyeai-models"
 
+MODEL_STATS = {
+    "efficientnet_b3": {
+        "display_name": "EfficientNet-B3",
+        "accuracy": 64.84,
+        "macro_f1": 0.593,
+        "kappa": 0.473,
+        "per_class_f1": {
+            "Cataract": 0.727,
+            "Glaucoma": 0.444,
+            "Normal":   0.747,
+            "Retinal Disease": 0.452,
+        },
+        "note": "Fast & efficient — good all-round baseline",
+    },
+    "resnet50": {
+        "display_name": "ResNet-50",
+        "accuracy": 67.03,
+        "macro_f1": 0.580,
+        "kappa": 0.486,
+        "per_class_f1": {
+            "Cataract": 0.788,
+            "Glaucoma": 0.483,
+            "Normal":   0.776,
+            "Retinal Disease": 0.273,
+        },
+        "note": "Best overall performer (highest kappa)",
+    },
+    "vit_base_patch16_224": {
+        "display_name": "ViT-B/16",
+        "accuracy": 61.54,
+        "macro_f1": 0.530,
+        "kappa": 0.407,
+        "per_class_f1": {
+            "Cataract": 0.788,
+            "Glaucoma": 0.400,
+            "Normal":   0.708,
+            "Retinal Disease": 0.222,
+        },
+        "note": "Transformer-based — needs larger dataset to shine",
+    },
+}
+
 @st.cache_resource
 def load_classifier(ckpt_dir: str = "outputs/classifier",
                     model_name: str = "efficientnet_b3"):
@@ -174,6 +216,23 @@ def main():
     conf_threshold = st.sidebar.slider("Confidence threshold", 0.0, 1.0, 0.5, 0.05)
 
     st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Model Performance")
+    stats = MODEL_STATS[model_name]
+    st.sidebar.markdown(f"**{stats['display_name']}** — *{stats['note']}*")
+    col1, col2, col3 = st.sidebar.columns(3)
+    col1.metric("Accuracy", f"{stats['accuracy']:.1f}%")
+    col2.metric("Macro F1", f"{stats['macro_f1']:.3f}")
+    col3.metric("Kappa", f"{stats['kappa']:.3f}")
+    st.sidebar.markdown("**Per-class F1 (test set, n=91)**")
+    for cls, f1 in stats["per_class_f1"].items():
+        bar = int(f1 * 20)
+        filled = "█" * bar
+        empty  = "░" * (20 - bar)
+        st.sidebar.markdown(
+            f"`{cls:<16}` {filled}{empty} `{f1:.3f}`",
+            unsafe_allow_html=False,
+        )
+    st.sidebar.markdown("---")
     st.sidebar.info(
         "**Pipeline phases:**\n"
         "1. EDA: `01_eda.py`\n"
@@ -181,7 +240,7 @@ def main():
         "3. Classifier: `03_classify.py`\n"
         "4. Evaluation: `04_evaluate.py`\n"
         "5. LLM Benchmark: `05_llm_classify_gemini.py`\n"
-        "6. This app: `07_app.py`"
+        "6. This app: `06_app.py`"
     )
 
     # Load models
