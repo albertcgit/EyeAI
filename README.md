@@ -1,5 +1,12 @@
 # EyeAI — Deep Learning for Early Cataract Detection
 
+Live App: https://eyeaiscreener.streamlit.app
+Model Repository: https://huggingface.co/alcapps01/eyeai-models
+
+EyeAI is an automated retinal fundus image classification system that uses deep learning to detect four ocular conditions: Normal, Cataract, Glaucoma, and Retinal Disease. It supports three pretrained CNN architectures (EfficientNet-B3, ResNet-50, ViT-B/16) and provides Grad-CAM explainability visualisations.
+
+---
+
 ## Pre-requisites
 
 1. Run via Google Colab (https://colab.research.google.com)
